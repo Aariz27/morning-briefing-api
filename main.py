@@ -126,7 +126,7 @@ def run_briefing(req: BriefingRequest):
     # 4. Generate audio
     safe_instructions = req.audio_instructions.replace('"', '\\"')
     artifact = run_cli(
-        f'notebooklm generate audio "{safe_instructions}" --notebook {notebook_id} --json'
+        f'notebooklm generate audio "{safe_instructions}" --length short --notebook {notebook_id} --json'
     )
     task_id = artifact.get("task_id", "")
     logger.info(f"Generation started: task_id={task_id}")
