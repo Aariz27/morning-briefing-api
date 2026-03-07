@@ -77,6 +77,7 @@ jobs:
         run: |
           RESULT=$(notebooklm generate audio \
             "Cover the most important AI and tech stories from today's sources. Connect related threads across different sources where relevant." \
+            --length short \
             --notebook ${{ steps.create.outputs.notebook_id }} \
             --json)
           echo "task_id=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")" >> $GITHUB_OUTPUT
