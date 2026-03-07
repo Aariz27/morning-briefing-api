@@ -1,12 +1,17 @@
-name: 🎙️ Morning Briefing Podcast
+name: 🎙️ AI News Digest Podcast
 
 on:
   workflow_dispatch:
     inputs:
       briefing_text:
-        description: "Formatted morning briefing document from n8n"
+        description: "Formatted newsletter digest from n8n"
         required: true
         type: string
+      blog_urls:
+        description: "Comma-separated blog URLs to add as sources"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   generate-and-send:
@@ -28,21 +33,35 @@ jobs:
         env:
           NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
         run: |
-          RESULT=$(notebooklm create "Morning Briefing - $(date +%Y-%m-%d)" --json)
+          RESULT=$(notebooklm create "AI Digest - $(date +%Y-%m-%d)" --json)
           echo "notebook_id=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin)['notebook']['id'])")" >> $GITHUB_OUTPUT
 
-      - name: Add briefing source
+      - name: Add newsletter source
         env:
           NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
         run: |
           notebooklm source add /tmp/briefing.txt \
             --notebook ${{ steps.create.outputs.notebook_id }} --json
 
-      - name: Wait for source to be ready
+      - name: Add blog sources
+        if: ${{ github.event.inputs.blog_urls != '' }}
         env:
           NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
         run: |
-          # Poll source list until all sources are ready
+          IFS=',' read -ra URLS <<< "${{ github.event.inputs.blog_urls }}"
+          for url in "${URLS[@]}"; do
+            url=$(echo "$url" | xargs)
+            if [ -n "$url" ]; then
+              echo "Adding source: $url"
+              notebooklm source add "$url" \
+                --notebook ${{ steps.create.outputs.notebook_id }} --json || true
+            fi
+          done
+
+      - name: Wait for sources to be ready
+        env:
+          NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
+        run: |
           for i in $(seq 1 20); do
             STATUS=$(notebooklm source list --notebook ${{ steps.create.outputs.notebook_id }} --json \
               | python3 -c "import sys,json; sources=json.load(sys.stdin)['sources']; print(all(s['status']=='ready' for s in sources))")
@@ -51,14 +70,13 @@ jobs:
             sleep 15
           done
 
-      - name: Generate podcast (short format)
+      - name: Generate podcast
         id: generate
         env:
           NOTEBOOKLM_AUTH_JSON: ${{ secrets.NOTEBOOKLM_AUTH_JSON }}
         run: |
           RESULT=$(notebooklm generate audio \
-            "Create a tight morning briefing podcast. Cover key emails, action items, schedule, and today's focus. Be concise and energetic." \
-            --length short \
+            "Cover the most important AI and tech stories from today's sources. Connect related threads across different sources where relevant." \
             --notebook ${{ steps.create.outputs.notebook_id }} \
             --json)
           echo "task_id=$(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")" >> $GITHUB_OUTPUT
@@ -83,7 +101,7 @@ jobs:
           curl -s \
             -F chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
             -F audio=@/tmp/morning-briefing.mp3 \
-            -F caption="🎙️ Morning briefing ready — $(date +'%A, %B %d')" \
+            -F caption="🎙️ AI digest ready — $(date +'%A, %B %d')" \
             https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendAudio
 
       - name: Cleanup notebook
