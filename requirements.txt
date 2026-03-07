@@ -1,4 +1,0 @@
-fastapi
-uvicorn[standard]
-notebooklm-py
-pydantic
